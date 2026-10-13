@@ -1,0 +1,434 @@
+
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Super Mario: Dunia Ruang Tahun 1</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#102044;color:white;
+ font-family:"Century Gothic",Arial,sans-serif;
+ text-align:center;overflow-x:hidden
+}
+header{padding:12px;background:#173f85}
+h1{font-size:clamp(20px,4vw,32px);margin:4px}
+header p{margin:5px;font-size:14px}
+.hud{
+ display:flex;justify-content:center;gap:12px;
+ flex-wrap:wrap;padding:10px;font-weight:bold
+}
+.hud span{background:#234b82;padding:9px 15px;border-radius:20px}
+#gameWrap{width:100%;max-width:1000px;margin:auto;position:relative}
+canvas{
+ display:block;width:100%;height:auto;
+ border:3px solid white;border-radius:12px;
+ background:#72d8ff;touch-action:none
+}
+#message{
+ position:absolute;inset:0;background:#102044eF;
+ display:none;align-items:center;justify-content:center;
+ padding:18px;z-index:5
+}
+.panel{
+ background:white;color:#17345c;border-radius:22px;
+ padding:22px;width:min(440px,100%);
+ box-shadow:0 8px 0 #e8bd40
+}
+.panel h2{margin:5px}
+#question{font-size:19px;font-weight:bold;margin:15px 0}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{
+ font-family:inherit;font-weight:bold;cursor:pointer;
+ border:0;border-radius:13px;padding:13px;font-size:15px
+}
+.answer{background:#e5f1ff;color:#14396b;border:2px solid #9bc9ff}
+.answer:active,.answer:hover{background:#b9e8ff}
+.mainBtn{background:#ffca28;color:#563300;margin-top:14px}
+#feedback{min-height:25px;font-weight:bold;margin-top:10px}
+.controls{
+ display:flex;justify-content:space-between;align-items:center;
+ gap:12px;padding:12px;max-width:650px;margin:auto
+}
+.controlGroup{display:flex;gap:10px}
+.ctrl{
+ width:65px;height:58px;background:#ffd447;color:#183866;
+ font-size:25px;box-shadow:0 4px #b78718;
+ touch-action:none;user-select:none
+}
+#jump{background:#ff7043;color:white;box-shadow:0 4px #ad3d25}
+.help{font-size:13px;color:#d7eaff;padding:0 12px 16px}
+</style>
+</head>
+<body>
+<header>
+ <h1>🍄 SUPER MARIO: DUNIA RUANG</h1>
+ <p>Pengembaraan Matematik Tahun 1 🚀</p>
+</header>
+
+<div class="hud">
+ <span>🪙 Syiling: <b id="coins">0</b></span>
+ <span>⭐ Markah: <b id="score">0</b></span>
+ <span>📍 Misi: <b id="mission">1 / 5</b></span>
+</div>
+
+<div id="gameWrap">
+ <canvas id="game" width="960" height="500"></canvas>
+ <div id="message">
+  <div class="panel">
+   <div style="font-size:42px" id="emoji">⭐</div>
+   <h2 id="panelTitle">Misi Matematik!</h2>
+   <div id="question"></div>
+   <div class="answers" id="answers"></div>
+   <div id="feedback"></div>
+   <button class="mainBtn" id="continue" style="display:none"
+    onclick="continueGame()">Teruskan Pengembaraan ➜</button>
+  </div>
+ </div>
+</div>
+
+<div class="controls">
+ <div class="controlGroup">
+  <button class="ctrl" id="left" aria-label="Gerak kiri">⬅️</button>
+  <button class="ctrl" id="right" aria-label="Gerak kanan">➡️</button>
+ </div>
+ <button class="ctrl" id="jump">⬆️ LOMPAT</button>
+</div>
+<div class="help">
+ Komputer: guna kekunci ← → dan SPACE. Telefon/tablet: tekan butang kawalan.
+ <br>Jalani semua misi untuk menyelamatkan Kerajaan Ruang!
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const W=960,H=500;
+const $=id=>document.getElementById(id);
+
+const questions=[
+ {q:"Bentuk manakah seperti bola?",e:"⚽",
+  a:["Sfera","Kubus","Kon","Kuboid"],correct:0},
+ {q:"Kotak hadiah berbentuk apakah?",e:"🎁",
+  a:["Kon","Kuboid","Sfera","Silinder"],correct:1},
+ {q:"Dadu mempunyai bentuk apakah?",e:"🎲",
+  a:["Sfera","Kon","Kubus","Silinder"],correct:2},
+ {q:"Aiskrim kon menyerupai bentuk apakah?",e:"🍦",
+  a:["Kuboid","Sfera","Kubus","Kon"],correct:3},
+ {q:"Tin minuman menyerupai bentuk apakah?",e:"🥫",
+  a:["Silinder","Kon","Kubus","Sfera"],correct:0}
+];
+
+let player, camera, coins, score, mission, running, won;
+let keys={}, buttons={}, lastTime=0, frame=0;
+let platforms=[], coinItems=[], checkpoints=[];
+
+function reset(){
+ player={x:45,y:350,vx:0,vy:0,w:34,h:43,
+         grounded:false,face:1};
+ camera=0;coins=0;score=0;mission=0;
+ running=true;won=false;
+ platforms=[
+  {x:0,y:430,w:340,h:70},
+  {x:390,y:390,w:190,h:110},
+  {x:630,y:430,w:280,h:70},
+  {x:960,y:385,w:200,h:115},
+  {x:1200,y:430,w:240,h:70},
+  {x:1480,y:385,w:210,h:115},
+  {x:1740,y:430,w:420,h:70},
+  {x:160,y:340,w:110,h:18},
+  {x:440,y:305,w:100,h:18},
+  {x:700,y:345,w:100,h:18},
+  {x:1010,y:300,w:110,h:18},
+  {x:1260,y:345,w:100,h:18},
+  {x:1520,y:300,w:100,h:18}
+ ];
+ coinItems=[];
+ [180,230,470,510,740,790,1040,1080,1300,1550,1600,1800,1870]
+ .forEach((x,i)=>coinItems.push({
+   x,y:[300,300,260,260,300,300,250,250,300,250,250,350,350][i],
+   taken:false
+ }));
+ checkpoints=[520,900,1220,1510,1750];
+ updateHUD();
+}
+reset();
+
+function updateHUD(){
+ $("coins").textContent=coins;
+ $("score").textContent=score;
+ $("mission").textContent=Math.min(mission+1,5)+" / 5";
+}
+
+function roundedRect(x,y,w,h,r,color){
+ ctx.fillStyle=color;
+ ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();
+}
+
+function drawBackground(){
+ let sky=ctx.createLinearGradient(0,0,0,H);
+ sky.addColorStop(0,"#64d5ff");
+ sky.addColorStop(1,"#e0f9ff");
+ ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+
+ // Matahari
+ ctx.fillStyle="#ffec74";
+ ctx.beginPath();ctx.arc(820,75,36,0,Math.PI*2);ctx.fill();
+
+ // Awan
+ for(let i=0;i<7;i++){
+  let x=((i*190-camera*.18)%(W+160)+W+160)%(W+160)-50;
+  let y=65+(i%3)*45;
+  ctx.fillStyle="white";
+  ctx.beginPath();
+  ctx.arc(x,y,22,0,Math.PI*2);
+  ctx.arc(x+24,y-12,28,0,Math.PI*2);
+  ctx.arc(x+51,y,22,0,Math.PI*2);
+  ctx.fill();
+ }
+ // Bukit
+ for(let i=0;i<8;i++){
+  let x=((i*180-camera*.35)%(W+240)+W+240)%(W+240)-100;
+  ctx.fillStyle=i%2?"#72d78a":"#42bd7c";
+  ctx.beginPath();ctx.ellipse(x,440,100,105,0,Math.PI,Math.PI*2);ctx.fill();
+ }
+}
+
+function drawBlock(p){
+ let x=p.x-camera;
+ if(x+p.w<0||x>W)return;
+ ctx.fillStyle="#a65a28";
+ ctx.fillRect(x,p.y,p.w,p.h);
+ ctx.fillStyle="#6cbd45";
+ ctx.fillRect(x,p.y,p.w,10);
+ for(let xx=x+12;xx<x+p.w;xx+=32){
+  ctx.strokeStyle="#d99550";ctx.lineWidth=2;
+  ctx.strokeRect(xx,p.y+18,18,15);
+ }
+}
+
+function drawCoin(c){
+ if(c.taken)return;
+ let x=c.x-camera;
+ if(x<-30||x>W+30)return;
+ ctx.fillStyle="#ffb800";
+ ctx.beginPath();ctx.ellipse(x,c.y,11,15,0,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle="#fff17a";ctx.lineWidth=3;
+ ctx.stroke();
+ ctx.fillStyle="#fff2a6";ctx.fillRect(x-2,c.y-8,4,16);
+}
+
+function drawPlayer(){
+ let x=player.x-camera,y=player.y;
+ // Bayang
+ ctx.fillStyle="#276d88";
+ ctx.beginPath();ctx.ellipse(x+17,y+43,19,5,0,0,Math.PI*2);ctx.fill();
+ // Kasut
+ roundedRect(x+2,y+34,14,9,4,"#653b2c");
+ roundedRect(x+19,y+34,14,9,4,"#653b2c");
+ // Badan
+ roundedRect(x+5,y+16,25,20,5,"#2876f0");
+ // Muka
+ roundedRect(x+6,y+5,24,22,7,"#ffc58b");
+ // Topi merah
+ roundedRect(x+3,y,29,9,4,"#ed3548");
+ ctx.fillStyle="#fff";
+ ctx.fillRect(x+22,y+10,4,5);
+ ctx.fillStyle="#222";
+ ctx.fillRect(x+24,y+11,2,3);
+ // Misai
+ ctx.fillStyle="#63351e";
+ ctx.fillRect(x+19,y+19,10,4);
+}
+
+function drawFinish(){
+ let x=2000-camera;
+ ctx.fillStyle="#f8f8f8";ctx.fillRect(x,300,5,130);
+ ctx.fillStyle="#ff4c58";
+ ctx.beginPath();ctx.moveTo(x+5,302);ctx.lineTo(x+72,320);
+ ctx.lineTo(x+5,340);ctx.fill();
+ ctx.font="bold 22px Arial";ctx.fillStyle="#17345c";
+ ctx.fillText("TAMAT!",x-20,285);
+}
+
+function draw(){
+ drawBackground();
+ platforms.forEach(drawBlock);
+ coinItems.forEach(drawCoin);
+
+ // Blok misi
+ checkpoints.forEach((x,i)=>{
+  let sx=x-camera;
+  if(sx>-40&&sx<W+40){
+   roundedRect(sx-18,330,36,36,6,"#ffca28");
+   ctx.fillStyle="#744300";ctx.font="bold 22px Arial";
+   ctx.textAlign="center";ctx.fillText("?",sx,356);
+   ctx.textAlign="left";
+  }
+ });
+ drawFinish();
+ drawPlayer();
+}
+
+function overlap(a,b){
+ return a.x<b.x+b.w&&a.x+a.w>b.x&&
+        a.y<b.y+b.h&&a.y+a.h>b.y;
+}
+
+function jump(){
+ if(!running||$("message").style.display==="flex")return;
+ if(player.grounded){
+  player.vy=-610;player.grounded=false;
+ }
+}
+
+function update(dt){
+ if(!running)return;
+ let quizOpen=$("message").style.display==="flex";
+ if(quizOpen)return;
+
+ let dir=(keys.ArrowRight||buttons.right?1:0)-
+         (keys.ArrowLeft||buttons.left?1:0);
+ player.vx=dir*245;
+ if(dir)player.face=dir;
+ player.x+=player.vx*dt;
+ player.x=Math.max(0,player.x);
+ player.vy+=1500*dt;
+ let oldY=player.y;
+ player.y+=player.vy*dt;
+ player.grounded=false;
+
+ for(let p of platforms){
+  let horizontal=player.x+player.w>p.x&&player.x<p.x+p.w;
+  if(horizontal&&player.vy>=0&&
+     oldY+player.h<=p.y+5&&player.y+player.h>=p.y){
+   player.y=p.y-player.h;
+   player.vy=0;player.grounded=true;
+  }
+ }
+ // Jatuh: kembali ke tempat mula
+ if(player.y>H+80){
+  player.x=Math.max(20,player.x-100);
+  player.y=250;player.vy=0;
+ }
+
+ // Kutip syiling
+ coinItems.forEach(c=>{
+  if(!c.taken&&Math.abs((player.x+17)-c.x)<25&&
+     Math.abs((player.y+20)-c.y)<35){
+   c.taken=true;coins++;score+=10;updateHUD();
+  }
+ });
+
+ // Misi kuiz
+ if(mission<checkpoints.length&&
+    player.x+player.w>checkpoints[mission]){
+  openQuestion(mission);
+ }
+
+ if(player.x>1990){
+  finishGame();
+ }
+ camera=Math.max(0,Math.min(player.x-300,2000-W));
+}
+
+function openQuestion(i){
+ running=false;
+ const q=questions[i];
+ $("message").style.display="flex";
+ $("emoji").textContent=q.e;
+ $("panelTitle").textContent="⭐ Misi "+(i+1);
+ $("question").textContent=q.q;
+ $("feedback").textContent="";
+ $("continue").style.display="none";
+ $("answers").innerHTML="";
+ q.a.forEach((a,index)=>{
+  const b=document.createElement("button");
+  b.className="answer";b.textContent=a;
+  b.onclick=()=>{
+   [...$("answers").children].forEach(btn=>btn.disabled=true);
+   if(index===q.correct){
+    $("feedback").textContent="BETUL! Hebat, wira ruang! 🎉";
+    $("feedback").style.color="#138343";
+    score+=20;
+   }else{
+    $("feedback").textContent="Cuba lagi lain kali! Jawapan: "+q.a[q.correct];
+    $("feedback").style.color="#d13b42";
+   }
+   mission++;updateHUD();
+   $("continue").style.display="inline-block";
+  };
+  $("answers").appendChild(b);
+ });
+}
+
+function continueGame(){
+ $("message").style.display="none";
+ running=true;
+ if(mission>=questions.length){
+  // semua soalan telah dijawab; terus ke garisan penamat
+  player.x=Math.max(player.x,1800);
+ }
+}
+
+function finishGame(){
+ if(won)return;
+ won=true;running=false;
+ $("message").style.display="flex";
+ $("emoji").textContent="🏆";
+ $("panelTitle").textContent="TAHNIAH, WIRA RUANG!";
+ $("question").textContent=
+  "Anda berjaya menamatkan pengembaraan! Markah: "+score+
+  " | Syiling: "+coins+" 🪙";
+ $("answers").innerHTML="";
+ $("feedback").textContent="Teruskan belajar dan cuba lagi!";
+ $("continue").textContent="🔄 Main Semula";
+ $("continue").style.display="inline-block";
+ $("continue").onclick=()=>{
+  $("continue").textContent="Teruskan Pengembaraan ➜";
+  $("continue").onclick=continueGame;
+  $("message").style.display="none";
+  reset();
+ };
+}
+
+function loop(time){
+ let dt=Math.min((time-lastTime)/1000||0,0.035);
+ lastTime=time;frame++;
+ update(dt);draw();
+ requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Papan kekunci
+window.addEventListener("keydown",e=>{
+ if(["ArrowLeft","ArrowRight","ArrowUp"," "].includes(e.key))
+  e.preventDefault();
+ keys[e.key===" "?"Space":e.key]=true;
+ if(e.key==="ArrowUp"||e.key===" "||e.key==="Space")jump();
+});
+window.addEventListener("keyup",e=>{
+ keys[e.key===" "?"Space":e.key]=false;
+});
+
+// Kawalan sentuh: tekan dan tahan
+function bindHold(id,key){
+ const el=$(id);
+ const down=e=>{
+  e.preventDefault();buttons[key]=true;
+  try{el.setPointerCapture(e.pointerId)}catch(_){}
+ };
+ const up=e=>{e.preventDefault();buttons[key]=false};
+ el.addEventListener("pointerdown",down);
+ el.addEventListener("pointerup",up);
+ el.addEventListener("pointercancel",up);
+ el.addEventListener("lostpointercapture",()=>buttons[key]=false);
+}
+bindHold("left","left");
+bindHold("right","right");
+$("jump").addEventListener("pointerdown",e=>{
+ e.preventDefault();jump();
+});
+</script>
+</body>
+</html>
